@@ -262,25 +262,42 @@
 
     var first = records[0].dateTs;
     var last = records[records.length - 1].dateTs;
+    var created = new Date();
 
-    var heads = ['<th>Datum</th>'].concat(PREVIEW_COLUMNS.map(function (k) {
-      return '<th class="num">' + FIELDS_BY_KEY[k].label + '</th>';
-    })).join('');
+    var html = '';
+    html += '<h1>ME/CFS-Verlaufsbericht</h1>';
+    html += '<p class="report-meta">Zeitraum: ' + fmtFull(first) + ' – ' + fmtFull(last) + ' · ' + records.length + ' Einträge · Erstellt am ' + fmtFull(created.getTime()) + '</p>';
 
-    var rows = records.map(function (r) {
-      var cells = ['<td>' + fmtFull(r.dateTs) + '</td>'];
-      PREVIEW_COLUMNS.forEach(function (key) {
-        var v = r[key];
-        cells.push('<td class="num">' + (typeof v === 'number' ? fmtNumber(v) : '–') + '</td>');
+    var risk = computeRisk();
+    if (risk) {
+      html += '<h2>Crash-Risiko-Orientierung</h2>';
+      html += '<div class="risk-gauge risk-' + risk.level + '"><div class="risk-label">Einschätzung</div><div class="risk-level">' + risk.label + '</div><div class="risk-label">' + risk.points + ' Warnpunkte (max. 10)</div></div>';
+      html += '<p class="risk-summary">' + risk.summary + '</p>';
+      html += '<h3>Warum diese Einschätzung?</h3>' + riskFactorsHtml(risk.factors);
+      html += '<h3>Kennzahlen (zuletzt vs. Baseline)</h3><div class="table-wrap">' + riskTableHtml() + '</div>';
+    }
+
+    html += '<h2>Verlauf</h2>';
+    REPORT_METRICS.forEach(function (key) {
+      var src = reportChart(720, 300, function (ctx, W, H) {
+        drawTrend(ctx, W, H, key, records, true, PALETTE);
       });
-      return '<tr>' + cells.join('') + '</tr>';
-    }).join('');
+      html += '<figure class="report-figure"><figcaption>' + metricLabel(key) + '</figcaption><img src="' + src + '" alt="Verlauf: ' + metricLabel(key) + '"></figure>';
+    });
 
-    content.innerHTML =
-      '<h2>Übersicht</h2>' +
-      '<p>Zeitraum: ' + fmtFull(first) + ' – ' + fmtFull(last) + ' · ' + records.length + ' Einträge.</p>' +
-      '<table class="report-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + '</tbody></table>' +
-      '<p style="color:#4a515c; font-size:0.85rem; margin-top:16px;">Die konfigurierbaren Diagramme und Berichts-Abschnitte folgen in den nächsten Schritten.</p>';
+    var heatH = 10 + DOMAINS.length * 30 + 56;
+    var heatSrc = reportChart(720, heatH, function (ctx, W, H) {
+      drawHeatmap(ctx, W, H, PALETTE);
+    });
+    html += '<h2>Heatmap (Symptombereiche)</h2><figure class="report-figure"><img src="' + heatSrc + '" alt="Heatmap der Symptombereiche"></figure>';
+
+    html += '<h2>Symptombereiche (Zusammenfassung)</h2>' + domainSummaryHtml();
+    html += '<h2>PEM-Episoden</h2>' + pemEpisodesHtml();
+    html += notesHtml();
+
+    html += '<div class="disclaimer"><strong>Hinweis:</strong> Dieser Bericht wurde automatisch aus deinen selbst erfassten Daten erstellt und dient als Übersicht für medizinisches Fachpersonal. Er ersetzt keine ärztliche Diagnose oder Behandlung und ist kein Medizinprodukt.</div>';
+
+    content.innerHTML = html;
   }
 
   function handleFile(file) {
@@ -388,6 +405,572 @@
       window.print();
     });
     updateStatus();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Schritt 2: Auswertung & Diagramme
+  // ---------------------------------------------------------------------------
+
+  var REPORT_METRICS = ['zustand_0_10', 'bell_0_100', 'fatigue_0_4', 'pem_heute_0_4', 'belastung_koerperlich_0_4', 'belastung_kognitiv_0_4', 'belastung_reiz_0_4'];
+  var WORSENING_METRICS = ['fatigue_0_4', 'pem_heute_0_4', 'belastung_koerperlich_0_4', 'belastung_kognitiv_0_4', 'belastung_reiz_0_4', 'schlafqualitaet_0_4'];
+  var LOAD_METRICS = ['belastung_koerperlich_0_4', 'belastung_kognitiv_0_4', 'belastung_reiz_0_4'];
+  var RECENT_WINDOW = 3;
+  var BASELINE_WINDOW = 14;
+
+  // Helle Farbpalette für die Diagramme im Bericht (weißes Papier)
+  var PALETTE = {
+    grid: 'rgba(0,0,0,0.12)',
+    axis: 'rgba(0,0,0,0.35)',
+    text: '#3a3f46',
+    baseline: '#8a6d1f',
+    crash: '#b5522a',
+    line: '#1f6f9f',
+    emptyCell: '#e8e8e8',
+    heatScale: [
+      [0, 208, 216, 222],
+      [1, 150, 182, 166],
+      [2, 214, 192, 122],
+      [3, 214, 150, 118],
+      [4, 200, 108, 96]
+    ]
+  };
+
+  function colorForScale(v, palette) {
+    var stops = palette.heatScale;
+    var t = Math.max(0, Math.min(4, v));
+    var lo = Math.floor(t);
+    var hi = Math.ceil(t);
+    var f = t - lo;
+    var a = stops[lo], b = stops[hi];
+    var r = Math.round(a[0] + (b[0] - a[0]) * f);
+    var g = Math.round(a[1] + (b[1] - a[1]) * f);
+    var bl = Math.round(a[2] + (b[2] - a[2]) * f);
+    return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+
+  function reportChart(width, height, drawFn) {
+    var scale = 2;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    drawFn(ctx, width, height);
+    return canvas.toDataURL('image/png');
+  }
+  function fmtShort(ts) {
+    return new Date(ts).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  }
+
+  function metricLabel(metric) {
+    if (metric.indexOf('domain:') === 0) {
+      var d = DOMAINS_BY_KEY[metric.slice(7)];
+      return d ? d.label : metric;
+    }
+    var f = FIELDS_BY_KEY[metric];
+    return f ? f.label : metric;
+  }
+
+  function getMetricValue(record, metric) {
+    if (metric.indexOf('domain:') === 0) {
+      var d = DOMAINS_BY_KEY[metric.slice(7)];
+      return d ? domainMean(record, d) : null;
+    }
+    return record[metric];
+  }
+
+  function domainMean(record, domain) {
+    var vals = [];
+    domain.members.forEach(function (k) {
+      var v = record[k];
+      if (typeof v === 'number') vals.push(v);
+    });
+    return vals.length ? mean(vals) : null;
+  }
+
+  function isAcuteCrash(rec) {
+    var s = rec.pem_ausloeser;
+    return typeof s === 'string' && s.charAt(0) === '[';
+  }
+
+  function yRangeFor(metric, values) {
+    var type = metric.indexOf('domain:') === 0 ? '0_4' : FIELDS_BY_KEY[metric].type;
+    var nums = values.filter(function (v) { return typeof v === 'number'; });
+    var dataMax = nums.length ? Math.max.apply(null, nums) : 1;
+    var dataMin = nums.length ? Math.min.apply(null, nums) : 0;
+    var min, max;
+    if (type === '0_4' || type === '0_10' || type === '0_100') {
+      var fixed = type === '0_4' ? 4 : (type === '0_10' ? 10 : 100);
+      min = Math.min(0, dataMin);
+      max = Math.max(fixed, dataMax);
+    } else if (type === 'percent') {
+      min = Math.min(85, dataMin);
+      max = Math.max(100, dataMax);
+    } else if (type === 'celsius') {
+      min = Math.min(34, dataMin - 1);
+      max = dataMax + 1;
+    } else if (type === 'kg') {
+      min = Math.max(0, dataMin - 2);
+      max = dataMax + 2;
+    } else if (type === 'mmhg') {
+      min = Math.max(0, dataMin - 10);
+      max = dataMax + 10;
+    } else {
+      min = 0;
+      max = dataMax * 1.15;
+    }
+    if (max <= min) max = min + 1;
+    return { min: min, max: max };
+  }
+
+  function makeTicks(min, max) {
+    var span = max - min;
+    var step;
+    if (span <= 4) step = 1;
+    else if (span <= 10) step = 2;
+    else if (span <= 20) step = 5;
+    else if (span <= 100) step = 20;
+    else step = Math.ceil(span / 5);
+    var ticks = [];
+    var start = Math.ceil(min / step) * step;
+    for (var v = start; v <= max + 1e-9; v += step) ticks.push(v);
+    return ticks;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function hasValue(v) {
+    return v !== null && v !== undefined && String(v).trim() !== '';
+  }
+  function drawTrend(ctx, W, H, metric, viewRecords, showBaseline, palette) {
+    var padL = 42, padR = 12, padT = 16, padB = 40;
+
+    var allValues = records.map(function (r) { return getMetricValue(r, metric); });
+    var values = viewRecords.map(function (r) { return getMetricValue(r, metric); });
+    var range = yRangeFor(metric, values);
+
+    var plotW = W - padL - padR;
+    var plotH = H - padT - padB;
+    var ticks = makeTicks(range.min, range.max);
+
+    function xForDate(ts) {
+      var first = viewRecords[0].dateTs;
+      var last = viewRecords[viewRecords.length - 1].dateTs;
+      var span = last - first || 86400000;
+      return padL + ((ts - first) / span) * plotW;
+    }
+
+    function yFor(v) {
+      var span = range.max - range.min || 1;
+      return padT + (1 - (v - range.min) / span) * plotH;
+    }
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Raster + Y-Achse
+    ctx.strokeStyle = palette.grid;
+    ctx.fillStyle = palette.text;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.lineWidth = 1;
+
+    ticks.forEach(function (t) {
+      if (t < range.min || t > range.max) return;
+      var y = yFor(t);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W - padR, y);
+      ctx.stroke();
+      ctx.fillText(fmtNumber(t), padL - 6, y + 4);
+    });
+
+    // X-Achsen-Beschriftung (Datumsangaben)
+    var labelCount = Math.max(2, Math.min(6, Math.floor(plotW / 80)));
+    var step = Math.max(1, Math.ceil(viewRecords.length / labelCount));
+    ctx.textAlign = 'center';
+    for (var i = 0; i < viewRecords.length; i += step) {
+      var x = xForDate(viewRecords[i].dateTs);
+      ctx.fillText(fmtShort(viewRecords[i].dateTs), x, H - padB + 16);
+    }
+    var lastX = xForDate(viewRecords[viewRecords.length - 1].dateTs);
+    ctx.fillText(fmtShort(viewRecords[viewRecords.length - 1].dateTs), lastX, H - padB + 16);
+
+    // Baseline (Median über alle vorhandenen Werte)
+    if (showBaseline) {
+      var baseVals = allValues.filter(function (v) { return typeof v === 'number'; });
+      var med = median(baseVals);
+      if (med !== null && baseVals.length >= 2) {
+        var by = yFor(med);
+        ctx.strokeStyle = palette.baseline;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(padL, by);
+        ctx.lineTo(W - padR, by);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = palette.baseline;
+        ctx.textAlign = 'left';
+        ctx.fillText('Baseline ' + fmtNumber(med), padL + 4, by - 4);
+      }
+    }
+
+    // Achsenlinien
+    ctx.strokeStyle = palette.axis;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, padT + plotH);
+    ctx.lineTo(W - padR, padT + plotH);
+    ctx.stroke();
+
+    // Akute Crash-Marker
+    for (var ci = 0; ci < viewRecords.length; ci++) {
+      if (!isAcuteCrash(viewRecords[ci])) continue;
+      var cx = xForDate(viewRecords[ci].dateTs);
+      ctx.fillStyle = palette.crash;
+      ctx.beginPath();
+      ctx.moveTo(cx, padT + plotH);
+      ctx.lineTo(cx - 3, padT + plotH + 7);
+      ctx.lineTo(cx + 3, padT + plotH + 7);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Daten-Linie mit Lücken
+    var lineColor = palette.line;
+    ctx.strokeStyle = lineColor;
+    ctx.fillStyle = lineColor;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+
+    var started = false;
+    ctx.beginPath();
+    for (var j = 0; j < viewRecords.length; j++) {
+      var val = values[j];
+      if (typeof val !== 'number') { started = false; continue; }
+      var px = xForDate(viewRecords[j].dateTs);
+      var py = yFor(val);
+      if (!started) { ctx.moveTo(px, py); started = true; }
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // Punkte
+    ctx.fillStyle = lineColor;
+    for (var k = 0; k < viewRecords.length; k++) {
+      if (typeof values[k] !== 'number') continue;
+      ctx.beginPath();
+      ctx.arc(xForDate(viewRecords[k].dateTs), yFor(values[k]), 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  function drawHeatmap(ctx, W, H, palette) {
+    var rowH = 30;
+    var leftW = 96;
+    var padT = 10;
+    var padB = 56;
+    var plotW = W - leftW - 8;
+
+    function xForDate(ts) {
+      var first = records[0].dateTs;
+      var last = records[records.length - 1].dateTs;
+      var span = last - first || 86400000;
+      return leftW + ((ts - first) / span) * plotW;
+    }
+
+    ctx.clearRect(0, 0, W, H);
+
+    var cellW = plotW / records.length;
+    DOMAINS.forEach(function (domain, r) {
+      var y = padT + r * rowH;
+      ctx.fillStyle = palette.text;
+      ctx.font = '12px system-ui, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(domain.label, leftW - 6, y + rowH / 2 + 4);
+
+      for (var c = 0; c < records.length; c++) {
+        var val = domainMean(records[c], domain);
+        var x = xForDate(records[c].dateTs);
+        var cellW2 = Math.max(cellW - 1, 3);
+        if (val === null) {
+          ctx.fillStyle = palette.emptyCell;
+        } else {
+          ctx.fillStyle = colorForScale(val, palette);
+        }
+        ctx.fillRect(x, y + 2, cellW2, rowH - 4);
+      }
+    });
+
+    var dateY = padT + DOMAINS.length * rowH + 16;
+    ctx.fillStyle = palette.text;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    var labelStep = Math.max(1, Math.ceil(records.length / 8));
+    for (var i = 0; i < records.length; i += labelStep) {
+      ctx.fillText(fmtShort(records[i].dateTs), xForDate(records[i].dateTs) + cellW / 2, dateY);
+    }
+
+    var legendY = dateY + 22;
+    ctx.textAlign = 'left';
+    ctx.fillText('0 (niedrig)', leftW, legendY);
+    for (var g = 0; g <= 4; g++) {
+      ctx.fillStyle = colorForScale(g, palette);
+      ctx.fillRect(leftW + 64 + g * 22, legendY - 11, 18, 12);
+    }
+    ctx.fillStyle = palette.text;
+    ctx.fillText('4 (hoch)', leftW + 64 + 5 * 22 + 6, legendY);
+  }
+  function metricStats(key) {
+    var vals = records.map(function (r) { return typeof r[key] === 'number' ? r[key] : null; });
+    var numeric = [];
+    for (var i = 0; i < vals.length; i++) if (vals[i] !== null) numeric.push(vals[i]);
+    var recent = numeric.slice(-RECENT_WINDOW);
+    var base = numeric.slice(0, -RECENT_WINDOW).slice(-BASELINE_WINDOW);
+    if (!base.length) base = numeric.slice();
+    var rm = mean(recent);
+    var bm = median(base);
+    var dir = FIELDS_BY_KEY[key].dir;
+    var delta = null;
+    if (rm !== null && bm !== null) {
+      delta = (dir === 'better') ? (bm - rm) : (rm - bm);
+    }
+    return { recentMean: rm, baseMedian: bm, delta: delta, recentN: recent.length, baseN: base.length };
+  }
+
+  function deltaText(v, upVerb, downVerb) {
+    if (v === null || Math.abs(v) < 0.05) return 'unverändert';
+    return v > 0 ? ('um ' + fmtNumber(v) + ' ' + upVerb) : ('um ' + fmtNumber(-v) + ' ' + downVerb);
+  }
+
+  function computeRisk() {
+    if (records.length < 3) return null;
+
+    var factors = [];
+    var points = 0;
+
+    // Faktor 1: Symptom-Anstieg
+    var deltas = [];
+    WORSENING_METRICS.forEach(function (key) {
+      var s = metricStats(key);
+      if (s.delta !== null) deltas.push(s.delta);
+    });
+    var avgDelta = deltas.length ? mean(deltas) : 0;
+    var p1 = 0;
+    if (avgDelta >= 1.0) p1 = 2;
+    else if (avgDelta >= 0.5) p1 = 1;
+    points += p1;
+    factors.push({
+      text: 'Die Symptome sind im Schnitt ' + deltaText(avgDelta, 'gestiegen', 'gesunken') + ' (0–4-Skala).',
+      value: 'Symptom-Anstieg',
+      points: p1
+    });
+
+    // Faktor 2: Zustand/Bell-Abfall
+    var z = metricStats('zustand_0_10');
+    var b = metricStats('bell_0_100');
+    var p2 = 0;
+    var zWorse = z.delta !== null ? z.delta : 0;
+    var bWorse = b.delta !== null ? b.delta : 0;
+    if (zWorse >= 2 || bWorse >= 15) p2 = 2;
+    else if (zWorse >= 1 || bWorse >= 10) p2 = 1;
+    points += p2;
+    factors.push({
+      text: 'Zustand ' + deltaText(zWorse, 'gefallen', 'gestiegen') + ' (von 10), Bell ' + deltaText(bWorse, 'gefallen', 'gestiegen') + ' (von 100).',
+      value: 'Zustand/Bell-Abfall',
+      points: p2
+    });
+
+    // Faktor 3: Hohe aktuelle Belastung
+    var loadVals = [];
+    LOAD_METRICS.forEach(function (key) {
+      var s = metricStats(key);
+      if (s.recentMean !== null) loadVals.push(s.recentMean);
+    });
+    var loadRecentMean = loadVals.length ? mean(loadVals) : 0;
+    var p3 = 0;
+    if (loadRecentMean >= 2.5) p3 = 2;
+    else if (loadRecentMean >= 2.0) p3 = 1;
+    points += p3;
+    factors.push({
+      text: 'Die Belastung liegt aktuell bei ' + fmtNumber(loadRecentMean) + ' von 4.',
+      value: 'Hohe Belastung',
+      points: p3
+    });
+
+    // Faktor 4: Aktive PEM
+    var pemHeuteStats = metricStats('pem_heute_0_4');
+    var pemHeute = pemHeuteStats.recentMean !== null ? pemHeuteStats.recentMean : 0;
+    var p4 = 0;
+    if (pemHeute >= 2) p4 = 2;
+    else if (pemHeute >= 1) p4 = 1;
+    points += p4;
+    factors.push({
+      text: 'PEM heute ' + fmtNumber(pemHeute) + ' (von 4).',
+      value: 'Aktive PEM',
+      points: p4
+    });
+    // Faktor 5: Schlaf
+    var sq = metricStats('schlafqualitaet_0_4');
+    var sd = metricStats('schlafdauer_h');
+    var p5 = 0;
+    if ((sq.recentMean !== null && sq.recentMean >= 3) || (sd.recentMean !== null && sd.recentMean < 6)) p5 = 1;
+    points += p5;
+    factors.push({
+      text: 'Qualität ' + fmtNumber(sq.recentMean !== null ? sq.recentMean : 0) + ' (von 4), Dauer ' + fmtNumber(sd.recentMean !== null ? sd.recentMean : 0) + ' h.',
+      value: 'Schlaf',
+      points: p5
+    });
+
+    // Faktor 6: Objektive Überlastung (Ruhepuls-Anstieg oder HRV-Abfall)
+    var pr = metricStats('puls_ruhe');
+    var hv = metricStats('hrv');
+    var p6 = 0;
+    var prUp = (pr.recentMean !== null && pr.baseMedian !== null) ? (pr.recentMean - pr.baseMedian) : null;
+    var hvDrop = (hv.recentMean !== null && hv.baseMedian !== null && hv.baseMedian > 0) ? ((hv.baseMedian - hv.recentMean) / hv.baseMedian) : null;
+    var objText = 'Keine ausreichenden Messwerte (Ruhepuls/HRV).';
+    if (prUp !== null && prUp >= 5) {
+      p6 = 1;
+      objText = 'Ruhepuls Ø 3 Tage ' + fmtNumber(pr.recentMean) + ' bpm (Baseline ' + fmtNumber(pr.baseMedian) + ' bpm) — erhöht.';
+    } else if (hvDrop !== null && hvDrop >= 0.25) {
+      p6 = 1;
+      objText = 'HRV Ø 3 Tage ' + fmtNumber(hv.recentMean) + ' ms (Baseline ' + fmtNumber(hv.baseMedian) + ' ms) — reduziert.';
+    } else if (pr.recentMean !== null || hv.recentMean !== null) {
+      objText = 'Ruhepuls und HRV im persönlichen Bereich.';
+    }
+    points += p6;
+    factors.push({
+      text: objText,
+      value: 'Objektive Überlastung',
+      points: p6
+    });
+
+    var level, label, summary;
+    if (points <= 1) {
+      level = 'stable';
+      label = 'stabil';
+      summary = 'Die aktuellen Werte liegen im Bereich deines persönlichen Basisniveaus. Es gibt aktuell keine deutlichen Warnsignale.';
+    } else if (points <= 3) {
+      level = 'watch';
+      label = 'beobachten';
+      summary = 'Einzelne Warnsignale sind sichtbar. Pacing ist jetzt besonders wichtig, um einem möglichen Crash vorzubeugen.';
+    } else {
+      level = 'high';
+      label = 'hohes Crash-Risiko';
+      summary = 'Mehrere Warnsignale liegen gleichzeitig vor. Ein PEM-Crash ist möglich. Reduziere Belastung wo immer möglich und gönne dir Pausen.';
+    }
+
+    return { level: level, label: label, summary: summary, points: points, factors: factors };
+  }
+
+  function riskFactorsHtml(factors) {
+    var items = factors.map(function (f) {
+      return '<li>' + f.value + ': ' + f.text + ' (' + f.points + ' Punkt' + (f.points === 1 ? '' : 'e') + ')</li>';
+    });
+    return '<ul class="risk-factors">' + items.join('') + '</ul>';
+  }
+
+  function riskTableHtml() {
+    var rows = [];
+    ['zustand_0_10', 'bell_0_100', 'fatigue_0_4', 'pem_heute_0_4', 'belastung_koerperlich_0_4', 'belastung_kognitiv_0_4', 'belastung_reiz_0_4', 'schlafqualitaet_0_4', 'liegezeit_h', 'schritte', 'puls_ruhe', 'hrv'].forEach(function (key) {
+      var s = metricStats(key);
+      rows.push({ label: metricLabel(key), recent: s.recentMean, base: s.baseMedian, dir: FIELDS_BY_KEY[key].dir });
+    });
+
+    var html = '<table class="report-table"><thead><tr><th>Wert</th><th class="num">Baseline</th><th class="num">Ø 3 Tage</th><th class="num">Veränderung</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var deltaTxt = '–';
+      var cls = 'delta-flat';
+      if (r.recent !== null && r.base !== null) {
+        var numDelta = r.recent - r.base;
+        var sign = numDelta > 0.05 ? '↑' : (numDelta < -0.05 ? '↓' : '→');
+        deltaTxt = sign + ' ' + fmtNumber(Math.abs(numDelta));
+        if (Math.abs(numDelta) < 0.05) {
+          cls = 'delta-flat';
+        } else if (r.dir === 'better') {
+          cls = numDelta < 0 ? 'delta-up' : 'delta-down';
+        } else if (r.dir === 'worse') {
+          cls = numDelta > 0 ? 'delta-up' : 'delta-down';
+        } else {
+          cls = 'delta-flat';
+        }
+      }
+      html += '<tr><td>' + r.label + '</td>' +
+        '<td class="num">' + (r.base !== null ? fmtNumber(r.base) : '–') + '</td>' +
+        '<td class="num">' + (r.recent !== null ? fmtNumber(r.recent) : '–') + '</td>' +
+        '<td class="num ' + cls + '">' + deltaTxt + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+  function domainSummaryHtml() {
+    var rows = DOMAINS.map(function (d) {
+      var vals = [];
+      records.forEach(function (r) {
+        var v = domainMean(r, d);
+        if (v !== null) vals.push(v);
+      });
+      if (!vals.length) {
+        return '<tr><td>' + d.label + '</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">0</td></tr>';
+      }
+      var mn = Math.min.apply(null, vals);
+      var mx = Math.max.apply(null, vals);
+      return '<tr><td>' + d.label + '</td>' +
+        '<td class="num">' + fmtNumber(mean(vals)) + '</td>' +
+        '<td class="num">' + fmtNumber(median(vals)) + '</td>' +
+        '<td class="num">' + fmtNumber(mn) + '</td>' +
+        '<td class="num">' + fmtNumber(mx) + '</td>' +
+        '<td class="num">' + vals.length + '</td></tr>';
+    }).join('');
+    return '<div class="table-wrap"><table class="report-table">' +
+      '<thead><tr><th>Bereich</th><th class="num">Ø</th><th class="num">Median</th><th class="num">Min</th><th class="num">Max</th><th class="num">Tage</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function pemEpisodesHtml() {
+    var items = records.filter(function (r) {
+      return hasValue(r.pem_gesamt_0_4) || hasValue(r.pem_ausloeser) || hasValue(r.pem_dauer_h) ||
+        hasValue(r.pem_verzoegerung_h) || hasValue(r.pem_belastungsdatum);
+    });
+    if (!items.length) return '<p>Keine PEM-Episoden erfasst.</p>';
+
+    var rows = items.map(function (r) {
+      var ausloeser = hasValue(r.pem_ausloeser) ? escapeHtml(String(r.pem_ausloeser)) : '–';
+      var belastung = hasValue(r.pem_belastungsdatum) ? escapeHtml(String(r.pem_belastungsdatum)) : '–';
+      var verzoeg = hasValue(r.pem_verzoegerung_h) ? fmtNumber(r.pem_verzoegerung_h) + ' h' : '–';
+      var dauer = hasValue(r.pem_dauer_h) ? fmtNumber(r.pem_dauer_h) + ' h' : '–';
+      var schwere = hasValue(r.pem_gesamt_0_4) ? fmtNumber(r.pem_gesamt_0_4) + ' / 4' : '–';
+      var marker = isAcuteCrash(r) ? ' ⚡' : '';
+      return '<tr><td>' + fmtFull(r.dateTs) + marker + '</td><td>' + ausloeser + '</td>' +
+        '<td>' + belastung + '</td><td class="num">' + verzoeg + '</td>' +
+        '<td class="num">' + dauer + '</td><td class="num">' + schwere + '</td></tr>';
+    }).join('');
+
+    return '<div class="table-wrap"><table class="report-table">' +
+      '<thead><tr><th>Datum</th><th>Auslöser</th><th>Belastung</th><th class="num">Verzögerung</th><th class="num">Dauer</th><th class="num">Schwere</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function notesHtml() {
+    var notes = records.filter(function (r) { return hasValue(r.notiz); });
+    var kontext = records.filter(function (r) { return hasValue(r.kontext); });
+    if (!notes.length && !kontext.length) return '';
+
+    var html = '';
+    if (notes.length) {
+      html += '<h3>Notizen</h3><ul class="report-notes">' + notes.map(function (r) {
+        return '<li><strong>' + fmtFull(r.dateTs) + ':</strong> ' + escapeHtml(String(r.notiz)) + '</li>';
+      }).join('') + '</ul>';
+    }
+    if (kontext.length) {
+      html += '<h3>Kontext</h3><ul class="report-notes">' + kontext.map(function (r) {
+        return '<li><strong>' + fmtFull(r.dateTs) + ':</strong> ' + escapeHtml(String(r.kontext)) + '</li>';
+      }).join('') + '</ul>';
+    }
+    return html;
   }
 
   if (document.readyState === 'loading') {
