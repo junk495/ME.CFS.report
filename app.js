@@ -142,7 +142,7 @@
   // ---------------------------------------------------------------------------
 
   var records = [];
-  var PREVIEW_COLUMNS = ['zustand_0_10', 'bell_0_100', 'fatigue_0_4', 'pem_heute_0_4', 'belastung_koerperlich_0_4', 'belastung_kognitiv_0_4', 'belastung_reiz_0_4'];
+  var viewRecords = [];
 
   // ---------------------------------------------------------------------------
   // Formatierungs-Helfer
@@ -249,6 +249,25 @@
     if (printBtn) printBtn.disabled = false;
   }
 
+  function val(id) {
+    var el = document.getElementById(id);
+    return el ? el.value : '';
+  }
+
+  function secOn(id) {
+    var el = document.getElementById(id);
+    return el ? el.checked : true;
+  }
+
+  function getVisibleRecords() {
+    var rangeEl = document.getElementById('cfg-range');
+    var active = rangeEl ? rangeEl.querySelector('.chip.is-active') : null;
+    var r = active ? active.dataset.range : 'all';
+    if (r === 'all') return records;
+    var days = parseInt(r, 10);
+    return records.slice(Math.max(0, records.length - days));
+  }
+
   function renderPreview() {
     var empty = document.getElementById('preview-empty');
     var content = document.getElementById('preview-content');
@@ -260,48 +279,70 @@
     empty.hidden = true;
     content.hidden = false;
 
-    var first = records[0].dateTs;
-    var last = records[records.length - 1].dateTs;
+    viewRecords = getVisibleRecords();
+    var first = viewRecords[0].dateTs;
+    var last = viewRecords[viewRecords.length - 1].dateTs;
     var created = new Date();
 
-    var html = '';
-    html += '<h1>ME/CFS-Verlaufsbericht</h1>';
-    html += '<p class="report-meta">Zeitraum: ' + fmtFull(first) + ' – ' + fmtFull(last) + ' · ' + records.length + ' Einträge · Erstellt am ' + fmtFull(created.getTime()) + '</p>';
+    var title = val('cfg-title');
+    var patient = val('cfg-patient');
+    var birthdate = val('cfg-birthdate');
+    var doctor = val('cfg-doctor');
+    var note = val('cfg-note');
 
-    var risk = computeRisk();
-    if (risk) {
-      html += '<h2>Crash-Risiko-Orientierung</h2>';
-      html += '<div class="risk-gauge risk-' + risk.level + '"><div class="risk-label">Einschätzung</div><div class="risk-level">' + risk.label + '</div><div class="risk-label">' + risk.points + ' Warnpunkte (max. 10)</div></div>';
-      html += '<p class="risk-summary">' + risk.summary + '</p>';
-      html += '<h3>Warum diese Einschätzung?</h3>' + riskFactorsHtml(risk.factors);
-      html += '<h3>Kennzahlen (zuletzt vs. Baseline)</h3><div class="table-wrap">' + riskTableHtml() + '</div>';
+    var html = '';
+    html += '<h1>' + escapeHtml(title || 'ME/CFS-Verlaufsbericht') + '</h1>';
+    html += '<p class="report-meta">Zeitraum: ' + fmtFull(first) + ' – ' + fmtFull(last) + ' · ' + viewRecords.length + ' Einträge · Erstellt am ' + fmtFull(created.getTime()) + '</p>';
+
+    var headInfo = [];
+    if (patient) headInfo.push('<strong>Patient:in:</strong> ' + escapeHtml(patient));
+    if (birthdate) headInfo.push('<strong>Geburtsdatum:</strong> ' + escapeHtml(birthdate));
+    if (doctor) headInfo.push('<strong>Behandelnde:r Arzt:in:</strong> ' + escapeHtml(doctor));
+    if (headInfo.length) html += '<div class="report-headinfo">' + headInfo.join(' &nbsp;·&nbsp; ') + '</div>';
+    if (note) html += '<p class="report-note">' + escapeHtml(note) + '</p>';
+
+    if (secOn('sec-risk')) {
+      var risk = computeRisk();
+      if (risk) {
+        html += '<h2>Crash-Risiko-Orientierung</h2>';
+        html += '<div class="risk-gauge risk-' + risk.level + '"><div class="risk-label">Einschätzung</div><div class="risk-level">' + risk.label + '</div><div class="risk-label">' + risk.points + ' Warnpunkte (max. 10)</div></div>';
+        html += '<p class="risk-summary">' + risk.summary + '</p>';
+        html += '<h3>Warum diese Einschätzung?</h3>' + riskFactorsHtml(risk.factors);
+        html += '<h3>Kennzahlen (zuletzt vs. Baseline)</h3><div class="table-wrap">' + riskTableHtml() + '</div>';
+      }
     }
 
-    html += '<h2>Verlauf</h2>';
-    REPORT_METRICS.forEach(function (key) {
-      var src = reportChart(720, 300, function (ctx, W, H) {
-        drawTrend(ctx, W, H, key, records, true, PALETTE);
+    if (secOn('sec-verlauf')) {
+      html += '<h2>Verlauf</h2>';
+      REPORT_METRICS.forEach(function (key) {
+        var src = reportChart(720, 300, function (ctx, W, H) {
+          drawTrend(ctx, W, H, key, viewRecords, true, PALETTE);
+        });
+        html += '<figure class="report-figure"><figcaption>' + metricLabel(key) + '</figcaption><img src="' + src + '" alt="Verlauf: ' + metricLabel(key) + '"></figure>';
       });
-      html += '<figure class="report-figure"><figcaption>' + metricLabel(key) + '</figcaption><img src="' + src + '" alt="Verlauf: ' + metricLabel(key) + '"></figure>';
-    });
+    }
 
-    OVERLAY_GROUPS.forEach(function (g) {
-      var h = overlayChartHeight(g.metrics);
-      var src = reportChart(720, h, function (ctx, W, H) {
-        drawOverlay(ctx, W, H, g.metrics, records, PALETTE);
+    if (secOn('sec-vergleich')) {
+      OVERLAY_GROUPS.forEach(function (g) {
+        var h = overlayChartHeight(g.metrics);
+        var src = reportChart(720, h, function (ctx, W, H) {
+          drawOverlay(ctx, W, H, g.metrics, viewRecords, PALETTE);
+        });
+        html += '<h2>' + g.title + '</h2><figure class="report-figure"><img src="' + src + '" alt="Vergleich: ' + g.title + '"></figure>';
       });
-      html += '<h2>' + g.title + '</h2><figure class="report-figure"><img src="' + src + '" alt="Vergleich: ' + g.title + '"></figure>';
-    });
+    }
 
-    var heatH = 10 + DOMAINS.length * 30 + 56;
-    var heatSrc = reportChart(720, heatH, function (ctx, W, H) {
-      drawHeatmap(ctx, W, H, PALETTE);
-    });
-    html += '<h2>Heatmap (Symptombereiche)</h2><figure class="report-figure"><img src="' + heatSrc + '" alt="Heatmap der Symptombereiche"></figure>';
+    if (secOn('sec-heatmap')) {
+      var heatH = 10 + DOMAINS.length * 30 + 56;
+      var heatSrc = reportChart(720, heatH, function (ctx, W, H) {
+        drawHeatmap(ctx, W, H, viewRecords, PALETTE);
+      });
+      html += '<h2>Heatmap (Symptombereiche)</h2><figure class="report-figure"><img src="' + heatSrc + '" alt="Heatmap der Symptombereiche"></figure>';
+    }
 
-    html += '<h2>Symptombereiche (Zusammenfassung)</h2>' + domainSummaryHtml();
-    html += '<h2>PEM-Episoden</h2>' + pemEpisodesHtml();
-    html += notesHtml();
+    if (secOn('sec-domaenen')) html += '<h2>Symptombereiche (Zusammenfassung)</h2>' + domainSummaryHtml();
+    if (secOn('sec-pem')) html += '<h2>PEM-Episoden</h2>' + pemEpisodesHtml();
+    if (secOn('sec-notizen')) html += notesHtml();
 
     html += '<div class="disclaimer"><strong>Hinweis:</strong> Dieser Bericht wurde automatisch aus deinen selbst erfassten Daten erstellt und dient als Übersicht für medizinisches Fachpersonal. Er ersetzt keine ärztliche Diagnose oder Behandlung und ist kein Medizinprodukt.</div>';
 
@@ -412,6 +453,27 @@
     document.getElementById('btn-print').addEventListener('click', function () {
       window.print();
     });
+
+    // Konfiguration: jede Änderung aktualisiert die Vorschau
+    ['cfg-title', 'cfg-patient', 'cfg-birthdate', 'cfg-doctor', 'cfg-note'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', renderPreview);
+    });
+    ['sec-risk', 'sec-verlauf', 'sec-vergleich', 'sec-heatmap', 'sec-domaenen', 'sec-pem', 'sec-notizen'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('change', renderPreview);
+    });
+    var rangeEl = document.getElementById('cfg-range');
+    if (rangeEl) {
+      rangeEl.querySelectorAll('.chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          rangeEl.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('is-active'); });
+          chip.classList.add('is-active');
+          renderPreview();
+        });
+      });
+    }
+
     updateStatus();
   }
 
@@ -557,7 +619,7 @@
   function drawTrend(ctx, W, H, metric, viewRecords, showBaseline, palette) {
     var padL = 42, padR = 12, padT = 16, padB = 40;
 
-    var allValues = records.map(function (r) { return getMetricValue(r, metric); });
+    var allValues = viewRecords.map(function (r) { return getMetricValue(r, metric); });
     var values = viewRecords.map(function (r) { return getMetricValue(r, metric); });
     var range = yRangeFor(metric, values);
 
@@ -676,7 +738,7 @@
       ctx.fill();
     }
   }
-  function drawHeatmap(ctx, W, H, palette) {
+  function drawHeatmap(ctx, W, H, viewRecords, palette) {
     var rowH = 30;
     var leftW = 96;
     var padT = 10;
@@ -684,15 +746,15 @@
     var plotW = W - leftW - 8;
 
     function xForDate(ts) {
-      var first = records[0].dateTs;
-      var last = records[records.length - 1].dateTs;
+      var first = viewRecords[0].dateTs;
+      var last = viewRecords[viewRecords.length - 1].dateTs;
       var span = last - first || 86400000;
       return leftW + ((ts - first) / span) * plotW;
     }
 
     ctx.clearRect(0, 0, W, H);
 
-    var cellW = plotW / records.length;
+    var cellW = plotW / viewRecords.length;
     DOMAINS.forEach(function (domain, r) {
       var y = padT + r * rowH;
       ctx.fillStyle = palette.text;
@@ -700,9 +762,9 @@
       ctx.textAlign = 'right';
       ctx.fillText(domain.label, leftW - 6, y + rowH / 2 + 4);
 
-      for (var c = 0; c < records.length; c++) {
-        var val = domainMean(records[c], domain);
-        var x = xForDate(records[c].dateTs);
+      for (var c = 0; c < viewRecords.length; c++) {
+        var val = domainMean(viewRecords[c], domain);
+        var x = xForDate(viewRecords[c].dateTs);
         var cellW2 = Math.max(cellW - 1, 3);
         if (val === null) {
           ctx.fillStyle = palette.emptyCell;
@@ -717,9 +779,9 @@
     ctx.fillStyle = palette.text;
     ctx.font = '11px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    var labelStep = Math.max(1, Math.ceil(records.length / 8));
-    for (var i = 0; i < records.length; i += labelStep) {
-      ctx.fillText(fmtShort(records[i].dateTs), xForDate(records[i].dateTs) + cellW / 2, dateY);
+    var labelStep = Math.max(1, Math.ceil(viewRecords.length / 8));
+    for (var i = 0; i < viewRecords.length; i += labelStep) {
+      ctx.fillText(fmtShort(viewRecords[i].dateTs), xForDate(viewRecords[i].dateTs) + cellW / 2, dateY);
     }
 
     var legendY = dateY + 22;
@@ -733,7 +795,7 @@
     ctx.fillText('4 (hoch)', leftW + 64 + 5 * 22 + 6, legendY);
   }
   function metricStats(key) {
-    var vals = records.map(function (r) { return typeof r[key] === 'number' ? r[key] : null; });
+    var vals = viewRecords.map(function (r) { return typeof r[key] === 'number' ? r[key] : null; });
     var numeric = [];
     for (var i = 0; i < vals.length; i++) if (vals[i] !== null) numeric.push(vals[i]);
     var recent = numeric.slice(-RECENT_WINDOW);
@@ -755,7 +817,7 @@
   }
 
   function computeRisk() {
-    if (records.length < 3) return null;
+    if (viewRecords.length < 3) return null;
 
     var factors = [];
     var points = 0;
@@ -917,7 +979,7 @@
   function domainSummaryHtml() {
     var rows = DOMAINS.map(function (d) {
       var vals = [];
-      records.forEach(function (r) {
+      viewRecords.forEach(function (r) {
         var v = domainMean(r, d);
         if (v !== null) vals.push(v);
       });
@@ -939,7 +1001,7 @@
   }
 
   function pemEpisodesHtml() {
-    var items = records.filter(function (r) {
+    var items = viewRecords.filter(function (r) {
       return hasValue(r.pem_gesamt_0_4) || hasValue(r.pem_ausloeser) || hasValue(r.pem_dauer_h) ||
         hasValue(r.pem_verzoegerung_h) || hasValue(r.pem_belastungsdatum);
     });
@@ -963,8 +1025,8 @@
   }
 
   function notesHtml() {
-    var notes = records.filter(function (r) { return hasValue(r.notiz); });
-    var kontext = records.filter(function (r) { return hasValue(r.kontext); });
+    var notes = viewRecords.filter(function (r) { return hasValue(r.notiz); });
+    var kontext = viewRecords.filter(function (r) { return hasValue(r.kontext); });
     if (!notes.length && !kontext.length) return '';
 
     var html = '';

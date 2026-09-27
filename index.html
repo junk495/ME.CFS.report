@@ -28,7 +28,50 @@
   <div class="layout">
     <aside class="sidebar">
       <h2>Konfiguration</h2>
-      <p class="hint">Die Konfiguration (Kopfdaten, Zeitraum, Abschnitte, Diagramme) folgt in den nächsten Schritten.</p>
+
+      <div class="cfg-group">
+        <h3>Kopfdaten</h3>
+        <label class="field">
+          <span>Titel</span>
+          <input type="text" id="cfg-title" value="ME/CFS-Verlaufsbericht">
+        </label>
+        <label class="field">
+          <span>Patient:in</span>
+          <input type="text" id="cfg-patient" placeholder="Name">
+        </label>
+        <label class="field">
+          <span>Geburtsdatum</span>
+          <input type="date" id="cfg-birthdate">
+        </label>
+        <label class="field">
+          <span>Behandelnde:r Arzt:in</span>
+          <input type="text" id="cfg-doctor" placeholder="Name">
+        </label>
+        <label class="field">
+          <span>Freitext / Kommentar</span>
+          <textarea id="cfg-note" rows="2" placeholder="z. B. Anlass des Berichts"></textarea>
+        </label>
+      </div>
+
+      <div class="cfg-group">
+        <h3>Zeitraum</h3>
+        <div class="chip-row" id="cfg-range">
+          <button type="button" class="chip is-active" data-range="all">Alle</button>
+          <button type="button" class="chip" data-range="90">90 Tage</button>
+          <button type="button" class="chip" data-range="30">30 Tage</button>
+        </div>
+      </div>
+
+      <div class="cfg-group">
+        <h3>Abschnitte</h3>
+        <label class="toggle-row"><input type="checkbox" id="sec-risk" checked><span>Crash-Risiko</span></label>
+        <label class="toggle-row"><input type="checkbox" id="sec-verlauf" checked><span>Verlauf</span></label>
+        <label class="toggle-row"><input type="checkbox" id="sec-vergleich" checked><span>Vergleich</span></label>
+        <label class="toggle-row"><input type="checkbox" id="sec-heatmap" checked><span>Heatmap</span></label>
+        <label class="toggle-row"><input type="checkbox" id="sec-domaenen" checked><span>Symptombereiche</span></label>
+        <label class="toggle-row"><input type="checkbox" id="sec-pem" checked><span>PEM-Episoden</span></label>
+        <label class="toggle-row"><input type="checkbox" id="sec-notizen" checked><span>Notizen/Kontext</span></label>
+      </div>
     </aside>
 
     <main class="preview">
