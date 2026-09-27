@@ -454,25 +454,25 @@
       window.print();
     });
 
-    // Konfiguration: jede Änderung aktualisiert die Vorschau
-    ['cfg-title', 'cfg-patient', 'cfg-birthdate', 'cfg-doctor', 'cfg-note'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.addEventListener('input', renderPreview);
+    // Konfiguration: Delegation für alle Änderungen (robust)
+    document.addEventListener('input', function (e) {
+      var id = e.target && e.target.id;
+      if (id && id.indexOf('cfg-') === 0) renderPreview();
     });
-    ['sec-risk', 'sec-verlauf', 'sec-vergleich', 'sec-heatmap', 'sec-domaenen', 'sec-pem', 'sec-notizen'].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.addEventListener('change', renderPreview);
+    document.addEventListener('change', function (e) {
+      var id = e.target && e.target.id;
+      if (id && (id.indexOf('sec-') === 0 || id.indexOf('cfg-') === 0)) renderPreview();
     });
-    var rangeEl = document.getElementById('cfg-range');
-    if (rangeEl) {
-      rangeEl.querySelectorAll('.chip').forEach(function (chip) {
-        chip.addEventListener('click', function () {
-          rangeEl.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('is-active'); });
-          chip.classList.add('is-active');
-          renderPreview();
-        });
-      });
-    }
+    document.addEventListener('click', function (e) {
+      var chip = e.target && e.target.closest ? e.target.closest('#cfg-range .chip') : null;
+      if (!chip) return;
+      var rangeEl = document.getElementById('cfg-range');
+      if (rangeEl) {
+        rangeEl.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('is-active'); });
+        chip.classList.add('is-active');
+        renderPreview();
+      }
+    });
 
     updateStatus();
   }
