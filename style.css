@@ -209,3 +209,21 @@ body {
 
 .report-headinfo { margin: 0 0 4px; color: #2a2f37; font-size: 0.92rem; }
 .report-note { margin: 0 0 8px; color: #2a2f37; font-size: 0.92rem; white-space: pre-wrap; }
+
+/* ---- Layout (Schritt 5) ---- */
+
+.cfg-sub { margin-bottom: 14px; }
+.cfg-sub > span { display: block; margin-bottom: 4px; font-size: 0.85rem; color: var(--text-dim); }
+
+.report-paper.font-large { font-size: 1.1rem; }
+
+@media print {
+  .report-figure,
+  .risk-gauge,
+  .table-wrap,
+  .disclaimer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  h2 { break-after: avoid; page-break-after: avoid; }
+}

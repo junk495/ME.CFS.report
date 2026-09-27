@@ -72,6 +72,24 @@
         <label class="toggle-row"><input type="checkbox" id="sec-pem" checked><span>PEM-Episoden</span></label>
         <label class="toggle-row"><input type="checkbox" id="sec-notizen" checked><span>Notizen/Kontext</span></label>
       </div>
+
+      <div class="cfg-group">
+        <h3>Layout</h3>
+        <div class="cfg-sub">
+          <span>Seitengröße</span>
+          <div class="chip-row" id="cfg-pagesize">
+            <button type="button" class="chip is-active" data-size="a4">A4</button>
+            <button type="button" class="chip" data-size="letter">Letter</button>
+          </div>
+        </div>
+        <div class="cfg-sub">
+          <span>Schriftgröße</span>
+          <div class="chip-row" id="cfg-fontsize">
+            <button type="button" class="chip is-active" data-font="normal">Normal</button>
+            <button type="button" class="chip" data-font="large">Groß</button>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <main class="preview">

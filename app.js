@@ -268,6 +268,32 @@
     return records.slice(Math.max(0, records.length - days));
   }
 
+  function applyLayout() {
+    var pageGroup = document.getElementById('cfg-pagesize');
+    var size = 'a4';
+    if (pageGroup) {
+      var pc = pageGroup.querySelector('.chip.is-active');
+      size = pc ? (pc.dataset.size || 'a4') : 'a4';
+    }
+
+    var style = document.getElementById('page-size-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'page-size-style';
+      document.head.appendChild(style);
+    }
+    style.textContent = '@page { size: ' + (size === 'letter' ? 'letter' : 'A4') + '; margin: 14mm; }';
+
+    var fontGroup = document.getElementById('cfg-fontsize');
+    var font = 'normal';
+    if (fontGroup) {
+      var fc = fontGroup.querySelector('.chip.is-active');
+      font = fc ? (fc.dataset.font || 'normal') : 'normal';
+    }
+    var paper = document.querySelector('.report-paper');
+    if (paper) paper.classList.toggle('font-large', font === 'large');
+  }
+
   function renderPreview() {
     var empty = document.getElementById('preview-empty');
     var content = document.getElementById('preview-content');
@@ -464,16 +490,17 @@
       if (id && (id.indexOf('sec-') === 0 || id.indexOf('cfg-') === 0)) renderPreview();
     });
     document.addEventListener('click', function (e) {
-      var chip = e.target && e.target.closest ? e.target.closest('#cfg-range .chip') : null;
+      var chip = e.target && e.target.closest ? e.target.closest('.chip') : null;
       if (!chip) return;
-      var rangeEl = document.getElementById('cfg-range');
-      if (rangeEl) {
-        rangeEl.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('is-active'); });
-        chip.classList.add('is-active');
-        renderPreview();
-      }
+      var group = chip.parentElement;
+      if (!group || !group.classList.contains('chip-row')) return;
+      group.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('is-active'); });
+      chip.classList.add('is-active');
+      applyLayout();
+      if (group.id === 'cfg-range') renderPreview();
     });
 
+    applyLayout();
     updateStatus();
   }
 
