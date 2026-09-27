@@ -338,9 +338,9 @@
       }
     }
 
-    if (secOn('sec-verlauf')) {
+    if (secOn('sec-verlauf') && state.verlauf.length) {
       html += '<h2>Verlauf</h2>';
-      REPORT_METRICS.forEach(function (key) {
+      state.verlauf.forEach(function (key) {
         var src = reportChart(720, 300, function (ctx, W, H) {
           drawTrend(ctx, W, H, key, viewRecords, true, PALETTE);
         });
@@ -349,12 +349,13 @@
     }
 
     if (secOn('sec-vergleich')) {
-      OVERLAY_GROUPS.forEach(function (g) {
+      state.vergleich.forEach(function (g) {
+        if (!g.metrics.length) return;
         var h = overlayChartHeight(g.metrics);
         var src = reportChart(720, h, function (ctx, W, H) {
           drawOverlay(ctx, W, H, g.metrics, viewRecords, PALETTE);
         });
-        html += '<h2>' + g.title + '</h2><figure class="report-figure"><img src="' + src + '" alt="Vergleich: ' + g.title + '"></figure>';
+        html += '<h2>' + escapeHtml(g.title) + '</h2><figure class="report-figure"><img src="' + src + '" alt="Vergleich: ' + escapeHtml(g.title) + '"></figure>';
       });
     }
 
@@ -579,24 +580,40 @@
       window.print();
     });
 
-    // Konfiguration: Delegation für alle Änderungen (robust)
+    renderDiagramConfig();
+
+    // Konfiguration: Delegation für alle Änderungen
     document.addEventListener('input', function (e) {
-      var id = e.target && e.target.id;
+      var t = e.target;
+      if (!t) return;
+      if (t.classList && t.classList.contains('picker-search')) { filterPicker(t); return; }
+      var id = t.id;
       if (id && id.indexOf('cfg-') === 0) renderPreview();
     });
     document.addEventListener('change', function (e) {
-      var id = e.target && e.target.id;
+      var t = e.target;
+      if (!t) return;
+      if (t.classList) {
+        if (t.classList.contains('verlauf-check')) { toggleVerlauf(t.dataset.metric, t.checked); return; }
+        if (t.classList.contains('vergleich-check')) { toggleVergleichMetric(t.dataset.group, t.dataset.metric, t.checked); return; }
+      }
+      var id = t.id;
       if (id && (id.indexOf('sec-') === 0 || id.indexOf('cfg-') === 0)) renderPreview();
     });
     document.addEventListener('click', function (e) {
-      var chip = e.target && e.target.closest ? e.target.closest('.chip') : null;
-      if (!chip) return;
-      var group = chip.parentElement;
-      if (!group || !group.classList.contains('chip-row')) return;
-      group.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('is-active'); });
-      chip.classList.add('is-active');
-      applyLayout();
-      if (group.id === 'cfg-range') renderPreview();
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('#btn-add-vergleich')) { addVergleichGroup(); return; }
+      var rm = t.closest('.btn-remove');
+      if (rm) { removeVergleichGroup(rm.dataset.group); return; }
+      var chip = t.closest('.chip');
+      if (chip && chip.parentElement && chip.parentElement.classList.contains('chip-row')) {
+        var group = chip.parentElement;
+        group.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('is-active'); });
+        chip.classList.add('is-active');
+        applyLayout();
+        if (group.id === 'cfg-range') renderPreview();
+      }
     });
 
     applyLayout();
@@ -1345,6 +1362,130 @@
       ctx.fillStyle = palette.text;
       ctx.fillText(metricLabel(s.metric) + ' (' + scaleUnit(s.metric) + ')', lx + 16, ly);
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Schritt 7: Diagramm-Auswahl (Verlauf + Vergleich konfigurierbar)
+  // ---------------------------------------------------------------------------
+
+  var METRIC_GROUPS = [
+    { name: 'Kernwerte', items: ['zustand_0_10', 'bell_0_100', 'fatigue_0_4', 'pem_heute_0_4'] },
+    { name: 'Belastung & Pacing', items: ['belastung_koerperlich_0_4', 'belastung_kognitiv_0_4', 'belastung_reiz_0_4', 'pacing_0_4', 'arbeitsfaehigkeit_0_4', 'teilhabe_0_4'] },
+    { name: 'Alltag & Schlaf', items: ['liegezeit_h', 'hilfebedarf_min', 'schlafqualitaet_0_4', 'schlafdauer_h', 'schritte'] },
+    { name: 'Messwerte', items: ['puls_ruhe', 'puls_avg', 'puls_max', 'hrv', 'spo2', 'atemfrequenz', 'temperatur', 'blutdruck_sys', 'blutdruck_dia', 'gewicht'] },
+    { name: 'PEM (rückblickend)', items: ['pem_gesamt_0_4', 'pem_erholung_0_4', 'pem_fatigue_0_4', 'pem_kognition_0_4', 'pem_schmerz_0_4', 'pem_grippe_0_4', 'pem_verzoegerung_h', 'pem_dauer_h'] }
+  ];
+  DOMAINS.forEach(function (d) {
+    METRIC_GROUPS.push({ name: d.label, items: d.members.slice() });
+  });
+
+  var state = {
+    verlauf: REPORT_METRICS.slice(),
+    vergleich: OVERLAY_GROUPS.map(function (g, i) {
+      return { id: i + 1, title: g.title, metrics: g.metrics.slice() };
+    }),
+    nextId: OVERLAY_GROUPS.length + 1
+  };
+
+  function findVergleichGroup(groupId) {
+    for (var i = 0; i < state.vergleich.length; i++) {
+      if (state.vergleich[i].id === Number(groupId)) return state.vergleich[i];
+    }
+    return null;
+  }
+
+  function matchesSearch(metric, search) {
+    if (!search) return true;
+    var s = String(search).toLowerCase();
+    return metricLabel(metric).toLowerCase().indexOf(s) !== -1;
+  }
+
+  function groupedCheckboxList(selected, cls, groupId, search) {
+    var html = '';
+    METRIC_GROUPS.forEach(function (g) {
+      var items = g.items.filter(function (m) { return matchesSearch(m, search); });
+      if (!items.length) return;
+      html += '<div class="picker-group"><h4>' + g.name + '</h4><div class="picker-items">';
+      items.forEach(function (m) {
+        var on = selected.indexOf(m) !== -1;
+        html += '<label class="metric-check"><input type="checkbox" class="' + cls + '" data-metric="' + m + '"' + (groupId ? ' data-group="' + groupId + '"' : '') + (on ? ' checked' : '') + '><span>' + metricLabel(m) + '</span></label>';
+      });
+      html += '</div></div>';
+    });
+    return html || '<p class="hint">Keine Treffer.</p>';
+  }
+
+  function updateCounts() {
+    var v = document.querySelector('#verlauf-picker > summary');
+    if (v) v.textContent = 'Verlauf-Werte (' + state.verlauf.length + ')';
+    state.vergleich.forEach(function (g) {
+      var el = document.querySelector('.vergleich-item[data-group="' + g.id + '"] > summary');
+      if (el) el.textContent = g.title + ' (' + g.metrics.length + ')';
+    });
+  }
+  function renderDiagramConfig() {
+    var root = document.getElementById('diagram-config');
+    if (!root) return;
+
+    var html = '';
+    html += '<details class="picker" id="verlauf-picker"><summary>Verlauf-Werte (' + state.verlauf.length + ')</summary><div class="picker-body">';
+    html += '<input type="search" class="picker-search" id="verlauf-search" placeholder="Wert suchen…">';
+    html += '<div class="picker-groups" id="verlauf-groups">' + groupedCheckboxList(state.verlauf, 'verlauf-check', null, '') + '</div>';
+    html += '</div></details>';
+
+    html += '<div class="vergleich-head">Vergleiche</div>';
+    state.vergleich.forEach(function (g) {
+      html += '<details class="picker vergleich-item" data-group="' + g.id + '"><summary>' + escapeHtml(g.title) + ' (' + g.metrics.length + ')</summary><div class="picker-body">';
+      html += '<input type="search" class="picker-search vergleich-search" data-group="' + g.id + '" placeholder="Wert suchen…">';
+      html += '<div class="picker-groups vergleich-groups" data-group="' + g.id + '">' + groupedCheckboxList(g.metrics, 'vergleich-check', g.id, '') + '</div>';
+      html += '<button type="button" class="btn-remove" data-group="' + g.id + '">Entfernen</button>';
+      html += '</div></details>';
+    });
+    html += '<button type="button" class="btn-add" id="btn-add-vergleich">+ Vergleich hinzufügen</button>';
+
+    root.innerHTML = html;
+  }
+
+  function filterPicker(input) {
+    var container, selected, cls, groupId;
+    if (input.id === 'verlauf-search') {
+      container = document.getElementById('verlauf-groups');
+      selected = state.verlauf; cls = 'verlauf-check'; groupId = null;
+    } else {
+      var g = findVergleichGroup(input.dataset.group);
+      container = document.querySelector('.vergleich-groups[data-group="' + input.dataset.group + '"]');
+      selected = g ? g.metrics : []; cls = 'vergleich-check'; groupId = input.dataset.group;
+    }
+    if (container) container.innerHTML = groupedCheckboxList(selected, cls, groupId, input.value);
+  }
+
+  function toggleVerlauf(metric, on) {
+    var i = state.verlauf.indexOf(metric);
+    if (on && i === -1) state.verlauf.push(metric);
+    else if (!on && i !== -1) state.verlauf.splice(i, 1);
+    updateCounts();
+    renderPreview();
+  }
+
+  function toggleVergleichMetric(groupId, metric, on) {
+    var g = findVergleichGroup(groupId);
+    if (!g) return;
+    var i = g.metrics.indexOf(metric);
+    if (on && i === -1) g.metrics.push(metric);
+    else if (!on && i !== -1) g.metrics.splice(i, 1);
+    updateCounts();
+    renderPreview();
+  }
+
+  function addVergleichGroup() {
+    state.vergleich.push({ id: state.nextId++, title: 'Vergleich ' + (state.vergleich.length + 1), metrics: [] });
+    renderDiagramConfig();
+  }
+
+  function removeVergleichGroup(groupId) {
+    state.vergleich = state.vergleich.filter(function (g) { return g.id !== Number(groupId); });
+    renderDiagramConfig();
+    renderPreview();
   }
 
   if (document.readyState === 'loading') {

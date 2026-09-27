@@ -227,3 +227,27 @@ body {
   }
   h2 { break-after: avoid; page-break-after: avoid; }
 }
+
+/* ---- Diagramm-Auswahl (Schritt 7) ---- */
+
+.picker { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; background: var(--chip-bg); }
+.picker summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; padding: 0 12px; font-size: 0.9rem; font-weight: 500; color: var(--text); list-style: none; }
+.picker summary::-webkit-details-marker { display: none; }
+.picker summary::after { content: '▸'; margin-left: auto; color: var(--text-dim); }
+.picker[open] summary::after { content: '▾'; }
+
+.picker-body { padding: 0 12px 12px; }
+.picker-search { width: 100%; padding: 8px 10px; margin: 8px 0; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-panel); color: var(--text); font-size: 0.9rem; font-family: inherit; box-sizing: border-box; }
+.picker-search:focus { outline: none; border-color: var(--accent); }
+
+.picker-groups { max-height: 320px; overflow-y: auto; }
+.picker-group h4 { margin: 10px 0 4px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-dim); }
+.picker-items { display: flex; flex-wrap: wrap; gap: 4px; }
+.metric-check { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text); cursor: pointer; min-height: 28px; }
+.metric-check input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+.vergleich-head { margin: 12px 0 6px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-dim); }
+.vergleich-item { margin-bottom: 10px; }
+.btn-remove { min-height: 32px; margin-top: 8px; padding: 0 12px; border: 1px solid #b33a3a; border-radius: 6px; background: transparent; color: #d97c7c; font-size: 0.85rem; cursor: pointer; }
+.btn-add { min-height: 40px; width: 100%; padding: 0 12px; border: 1px dashed var(--accent); border-radius: 8px; background: transparent; color: var(--accent); font-size: 0.9rem; cursor: pointer; }
+.btn-add:hover { background: var(--accent-soft); }
