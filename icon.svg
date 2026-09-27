@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ME.CFS.report Icon">
+  <rect width="512" height="512" rx="96" fill="#16181d"/>
+
+  <!-- Dokument / Blatt -->
+  <path d="M120 88 h224 l64 64 v272 h-288 z" fill="#ffffff"/>
+  <path d="M344 88 v64 h64 z" fill="#dfe3e8"/>
+
+  <!-- Textzeilen (angedeutet) -->
+  <g stroke="#c3cad2" stroke-width="14" stroke-linecap="round">
+    <line x1="152" y1="150" x2="352" y2="150"/>
+    <line x1="152" y1="186" x2="300" y2="186"/>
+  </g>
+
+  <!-- Diagramm -->
+  <g stroke="#1f6f9f" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="152,352 216,292 268,316 328,220 372,244"/>
+  </g>
+  <circle cx="372" cy="244" r="14" fill="#1f6f9f"/>
+</svg>
