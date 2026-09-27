@@ -429,34 +429,133 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Demo-Daten
+  // Demo-Daten (vollständig, inkl. Symptombereiche für Heatmap & Zusammenfassung)
   // ---------------------------------------------------------------------------
 
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
   function buildDemo() {
+    var rand = mulberry32(42);
     var list = [];
     var DAY = 86400000;
     var base = new Date(2026, 8, 10).getTime();
-    for (var i = 13; i >= 0; i--) {
+    for (var i = 27; i >= 0; i--) {
       var ts = base - i * DAY;
       var d = new Date(ts);
       var iso = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
-      var w = Math.sin(i / 2.5);
-      var crash = (i === 3 || i === 4) ? 1 : 0;
+
+      var crash = (i >= 4 && i <= 8) ? 1 : 0;
+      var postCrash = (i >= 0 && i <= 3) ? 1 : 0;
+
+      function v(base, spread) {
+        var x = base + (rand() - 0.5) * spread;
+        if (crash) x += 1.2;
+        if (postCrash) x += 0.8;
+        return Math.max(0, Math.min(4, Math.round(x)));
+      }
+
+      var fatigue = v(1.6, 1.2);
+      var pem = crash ? 2 + Math.round(rand()) : 0;
+      var state = crash ? 3 : (postCrash ? 4 : 6);
+      var bell = crash ? 20 : (postCrash ? 30 : 50);
+      var loadK = crash ? 3 : Math.max(0, Math.min(4, Math.round(1 + rand() * 1.5)));
+      var loadC = crash ? 3 : Math.max(0, Math.min(4, Math.round(1 + rand() * 1.5)));
+      var loadR = crash ? 2 : Math.max(0, Math.min(4, Math.round(rand() * 1.5)));
+
       var rec = {
         datum: iso,
         erfassungs_typ: 'standard',
-        zustand_0_10: clamp(Math.round(5 + w * 2 - crash * 2), 0, 10),
-        bell_0_100: clamp(Math.round(50 + w * 15 - crash * 15), 0, 100),
-        fatigue_0_4: clamp(Math.round(2 + (1 - w) + crash), 0, 4),
-        pem_heute_0_4: crash ? 3 : 0,
-        liegezeit_h: Math.round(14 + w),
-        schlafqualitaet_0_4: clamp(Math.round(2 + w + crash), 0, 4),
-        belastung_koerperlich_0_4: clamp(Math.round(2 + (1 - w) + crash), 0, 4),
-        belastung_kognitiv_0_4: clamp(Math.round(2 + (1 - w)), 0, 4),
-        belastung_reiz_0_4: clamp(Math.round(1 + (1 - w)), 0, 4),
-        schlafdauer_h: Math.round((7 + w * 0.5 - crash) * 10) / 10,
-        schritte: Math.max(0, Math.round(1500 + w * 800 + 1000 - crash * 800)),
-        notiz: crash ? 'Belastung durch Einkauf' : null
+        zustand_0_10: state,
+        bell_0_100: bell,
+        fatigue_0_4: fatigue,
+        pem_heute_0_4: pem,
+        liegezeit_h: crash || postCrash ? 16 : 12 + Math.round(rand() * 4),
+        hilfebedarf_min: crash ? 120 : 30 + Math.round(rand() * 60),
+        schlafqualitaet_0_4: v(2, 1.5),
+        belastung_koerperlich_0_4: loadK,
+        belastung_kognitiv_0_4: loadC,
+        belastung_reiz_0_4: loadR,
+        pacing_0_4: crash ? 3 : 1,
+        arbeitsfaehigkeit_0_4: crash ? 3 : 2,
+        teilhabe_0_4: crash ? 3 : 2,
+        schlafdauer_h: crash ? 5 : 7,
+        schritte: crash ? 300 : 1500 + Math.round(rand() * 4000),
+        puls_ruhe: crash ? 72 + Math.round(rand() * 2) : (postCrash ? 69 + Math.round(rand() * 2) : 58 + Math.round(rand() * 4)),
+        puls_avg: crash ? 86 + Math.round(rand() * 6) : 73 + Math.round(rand() * 6),
+        puls_max: crash ? 135 + Math.round(rand() * 10) : 113 + Math.round(rand() * 12),
+        hrv: crash ? 30 + Math.round(rand() * 4) : (postCrash ? 38 + Math.round(rand() * 4) : 47 + Math.round(rand() * 6)),
+        spo2: 97 + Math.round(rand() * 2),
+        atemfrequenz: 12 + Math.round(rand() * 4),
+        temperatur: 36.5 + Math.round(rand() * 4) / 10,
+        blutdruck_sys: 118 + Math.round(rand() * 8),
+        blutdruck_dia: 77 + Math.round(rand() * 6),
+        gewicht: 72 + Math.round(rand() * 20) / 10,
+
+        pem_belastungsdatum: crash ? iso : null,
+        pem_ausloeser: crash ? '[13:45] Überanstrengung' : null,
+        pem_gesamt_0_4: crash ? 3 : null,
+        pem_dauer_h: crash ? 24 + Math.round(rand() * 48) : null,
+        notiz: crash ? 'Belastung durch Einkauf, danach 2 Tage Bettruhe' : null,
+        kontext: postCrash ? 'Erholung, viel Ruhe' : null,
+
+        schmerz_muskel: v(crash ? 3 : 1.5, 1),
+        schmerz_gelenk: v(1, 1),
+        schmerz_kopf: v(1.2, 1),
+        schmerz_neuro: v(1, 1),
+        schmerz_beruehrung: v(1, 1),
+        kognition_konzentration: v(2, 1.2),
+        kognition_gedaechtnis: v(2, 1.2),
+        kognition_sprache: v(1.5, 1),
+        kognition_koordination: v(1.2, 1),
+        reiz_licht: v(1.5, 1),
+        reiz_geraeusch: v(1.8, 1),
+        autonom_schwindel: v(1.5, 1),
+        autonom_herzrasen: v(1.5, 1),
+        autonom_atem: v(1, 1),
+        autonom_verdauung: v(1.2, 1),
+        autonom_blase: v(0.8, 1),
+        autonom_temperatur: v(1, 1),
+        immun_grippegefuehl: v(1.5, 1),
+        immun_hals: v(0.8, 1),
+        mcas_flush: v(0.8, 1),
+
+        schlaf_durchschlaf: v(2, 1.2),
+        schlaf_rhythmus: v(1.5, 1),
+        schlaf_hypersomnie: v(1.2, 1),
+        kognition_verlangsamt: v(2, 1.2),
+        kognition_multitasking: v(2, 1.2),
+        kognition_desorientierung: v(1, 1),
+        reiz_geruch: v(0.8, 1),
+        autonom_praesynkope: v(1, 1),
+        autonom_synkope: 0,
+        autonom_stehintoleranz: v(1.2, 1),
+        neuroendokrin_hitze: v(1, 1),
+        neuroendokrin_kaelte: v(1, 1),
+        neuroendokrin_appetit: v(1, 1),
+        neuroendokrin_stress: v(1.5, 1),
+        immun_fieber: v(0.5, 1),
+        immun_allergie: v(0.5, 1),
+        mcas_uebelkeit: v(0.8, 1),
+        mcas_bauchschmerz: v(0.8, 1),
+        mcas_durchfall: v(0.5, 1),
+        mcas_nahrung: v(0.8, 1),
+        mcas_medikament: v(0.5, 1),
+        funktion_koerperpflege: v(1.5, 1),
+        funktion_anziehen: v(1.5, 1),
+        funktion_essen: v(1.5, 1),
+        funktion_gehen: v(1.8, 1),
+        funktion_aufrecht: v(2, 1),
+        funktion_haushalt: v(2, 1),
+        funktion_kommunikation: v(1.5, 1),
+        funktion_ausser_haus: v(2.2, 1),
+        funktion_sonne: v(1.5, 1)
       };
       list.push(rec);
     }
