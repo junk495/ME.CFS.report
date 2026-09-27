@@ -10,6 +10,7 @@ Nur Änderungen, die die App selbst betreffen (Funktionen, UI, Verhalten), werde
 ### Neu
 
 - **Diagramm-Auswahl:** Im Bereich „Diagramme" lassen sich jetzt beliebige der ~80 erfassten Werte für den Verlauf auswählen (Suchfeld + gruppierte Liste). Vergleiche (mehrere Werte übereinander) können frei angelegt, befüllt und entfernt werden.
+- **Vollständige Beispieldaten:** „Beispiel" enthält jetzt alle erfassten Werte (alle Symptombereiche, PEM-Episoden, Messwerte), sodass Heatmap und Symptombereiche-Zusammenfassung ebenfalls gefüllt sind.
 
 ## v1.0.0 – 2026-09-26
 

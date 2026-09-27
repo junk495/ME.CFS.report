@@ -18,7 +18,6 @@ Die vollständige Dokumentation liegt im **[Projekt-Wiki](https://github.com/jun
 ## Roadmap (geplant, noch nicht umgesetzt)
 
 - Eigenständiger HTML-Export (eine portierbare Datei, nicht nur PDF).
-- Individuelle Zusammenstellung der Vergleichs-Diagramme (eigene Metrik-Auswahl pro Diagramm).
 - Frei wählbarer Zeitraum (Von/Bis) zusätzlich zu den Presets.
 - Speichern der Konfiguration (localStorage).
 
