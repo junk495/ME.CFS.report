@@ -285,6 +285,14 @@
       html += '<figure class="report-figure"><figcaption>' + metricLabel(key) + '</figcaption><img src="' + src + '" alt="Verlauf: ' + metricLabel(key) + '"></figure>';
     });
 
+    OVERLAY_GROUPS.forEach(function (g) {
+      var h = overlayChartHeight(g.metrics);
+      var src = reportChart(720, h, function (ctx, W, H) {
+        drawOverlay(ctx, W, H, g.metrics, records, PALETTE);
+      });
+      html += '<h2>' + g.title + '</h2><figure class="report-figure"><img src="' + src + '" alt="Vergleich: ' + g.title + '"></figure>';
+    });
+
     var heatH = 10 + DOMAINS.length * 30 + 56;
     var heatSrc = reportChart(720, heatH, function (ctx, W, H) {
       drawHeatmap(ctx, W, H, PALETTE);
@@ -971,6 +979,184 @@
       }).join('') + '</ul>';
     }
     return html;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Schritt 3: Overlay-Diagramm (mehrere Werte übereinander)
+  // ---------------------------------------------------------------------------
+
+  var OVERLAY_GROUPS = [
+    { title: 'Vergleich: Kernwerte', metrics: ['zustand_0_10', 'bell_0_100', 'fatigue_0_4', 'pem_heute_0_4'] },
+    { title: 'Vergleich: Belastung', metrics: ['belastung_koerperlich_0_4', 'belastung_kognitiv_0_4', 'belastung_reiz_0_4'] }
+  ];
+
+  function scaleType(metric) {
+    return metric.indexOf('domain:') === 0 ? '0_4' : FIELDS_BY_KEY[metric].type;
+  }
+
+  function scaleUnit(metric) {
+    var units = {
+      '0_4': '0–4', '0_10': '0–10', '0_100': '0–100',
+      'hours': 'h', 'minutes': 'min', 'steps': 'Schritte', 'bpm': 'bpm', 'ms': 'ms',
+      'percent': '%', 'rate': '1/min', 'celsius': '°C', 'mmhg': 'mmHg', 'kg': 'kg'
+    };
+    return units[scaleType(metric)] || scaleType(metric);
+  }
+
+  function normRangeFor(metric, values) {
+    var type = scaleType(metric);
+    if (type === '0_4') return { min: 0, max: 4 };
+    if (type === '0_10') return { min: 0, max: 10 };
+    if (type === '0_100') return { min: 0, max: 100 };
+    var nums = values.filter(function (v) { return typeof v === 'number'; });
+    var dataMax = nums.length ? Math.max.apply(null, nums) : 1;
+    var dataMin = nums.length ? Math.min.apply(null, nums) : 0;
+    if (type === 'percent') { dataMin = Math.min(85, dataMin); dataMax = Math.max(100, dataMax); }
+    if (dataMax <= dataMin) dataMax = dataMin + 1;
+    return { min: dataMin, max: dataMax };
+  }
+
+  function overlayChartHeight(metrics) {
+    var legendLines = Math.max(1, Math.ceil(metrics.length / 2));
+    return 240 + legendLines * 22 + 70;
+  }
+
+  function overlayYValue(metric, raw, values, normalized) {
+    if (!normalized) return raw;
+    var rng = normRangeFor(metric, values);
+    var span = rng.max - rng.min || 1;
+    return Math.max(0, Math.min(100, (raw - rng.min) / span * 100));
+  }
+  function drawOverlay(ctx, W, H, metrics, viewRecords, palette) {
+    var padL = 42, padR = 12, padT = 16;
+    var legendLines = Math.max(1, Math.ceil(metrics.length / 2));
+    var padB = 40 + legendLines * 22;
+
+    var plotW = W - padL - padR;
+    var plotH = H - padT - padB;
+
+    var types = metrics.map(function (m) { return scaleType(m); });
+    var sameScale = types.every(function (t) { return t === types[0]; });
+    var normalized = !sameScale;
+
+    var COLORS = ['#1f6f9f', '#b5522a', '#2e7d4f', '#8a6d1f', '#6b4fa0', '#a03a6b', '#3a8f8f', '#8f6b3a'];
+
+    var series = metrics.map(function (m, idx) {
+      return {
+        metric: m,
+        color: COLORS[idx % COLORS.length],
+        values: viewRecords.map(function (r) { return getMetricValue(r, m); })
+      };
+    });
+
+    var yMin, yMax;
+    if (normalized) {
+      yMin = 0; yMax = 100;
+    } else {
+      var allVals = [];
+      series.forEach(function (s) {
+        s.values.forEach(function (v) { if (typeof v === 'number') allVals.push(v); });
+      });
+      var rng = yRangeFor(metrics[0], allVals);
+      yMin = rng.min; yMax = rng.max;
+    }
+    var ticks = makeTicks(yMin, yMax);
+
+    function xForDate(ts) {
+      var first = viewRecords[0].dateTs;
+      var last = viewRecords[viewRecords.length - 1].dateTs;
+      var span = last - first || 86400000;
+      return padL + ((ts - first) / span) * plotW;
+    }
+    function yFor(v) {
+      var span = yMax - yMin || 1;
+      return padT + (1 - (v - yMin) / span) * plotH;
+    }
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Raster + Y-Achse
+    ctx.strokeStyle = palette.grid;
+    ctx.fillStyle = palette.text;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.lineWidth = 1;
+    ticks.forEach(function (t) {
+      if (t < yMin || t > yMax) return;
+      var y = yFor(t);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W - padR, y);
+      ctx.stroke();
+      ctx.fillText(fmtNumber(t), padL - 6, y + 4);
+    });
+
+    // Hinweis bei normalisierter Darstellung
+    if (normalized) {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = palette.text;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText('Werte normalisiert: 0–100 % des jeweiligen Skalenbereichs', padL + 4, padT + 12);
+    }
+
+    // X-Achsen-Beschriftung
+    var labelCount = Math.max(2, Math.min(6, Math.floor(plotW / 80)));
+    var step = Math.max(1, Math.ceil(viewRecords.length / labelCount));
+    ctx.textAlign = 'center';
+    for (var i = 0; i < viewRecords.length; i += step) {
+      ctx.fillText(fmtShort(viewRecords[i].dateTs), xForDate(viewRecords[i].dateTs), padT + plotH + 16);
+    }
+
+    // Achsenlinien
+    ctx.strokeStyle = palette.axis;
+    ctx.beginPath();
+    ctx.moveTo(padL, padT);
+    ctx.lineTo(padL, padT + plotH);
+    ctx.lineTo(W - padR, padT + plotH);
+    ctx.stroke();
+
+    // Datenreihen
+    series.forEach(function (s) {
+      ctx.strokeStyle = s.color;
+      ctx.fillStyle = s.color;
+      ctx.lineWidth = 2;
+
+      var started = false;
+      ctx.beginPath();
+      for (var j = 0; j < viewRecords.length; j++) {
+        var raw = s.values[j];
+        if (typeof raw !== 'number') { started = false; continue; }
+        var v = overlayYValue(s.metric, raw, s.values, normalized);
+        var px = xForDate(viewRecords[j].dateTs);
+        var py = yFor(v);
+        if (!started) { ctx.moveTo(px, py); started = true; }
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+
+      for (var k = 0; k < viewRecords.length; k++) {
+        if (typeof s.values[k] !== 'number') continue;
+        var vv = overlayYValue(s.metric, s.values[k], s.values, normalized);
+        ctx.beginPath();
+        ctx.arc(xForDate(viewRecords[k].dateTs), yFor(vv), 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+
+    // Legende
+    var legendY0 = padT + plotH + 34;
+    ctx.textAlign = 'left';
+    ctx.font = '11px system-ui, sans-serif';
+    series.forEach(function (s, idx) {
+      var col = idx % 2;
+      var row = Math.floor(idx / 2);
+      var lx = padL + col * (plotW / 2);
+      var ly = legendY0 + row * 22;
+      ctx.fillStyle = s.color;
+      ctx.fillRect(lx, ly - 9, 12, 12);
+      ctx.fillStyle = palette.text;
+      ctx.fillText(metricLabel(s.metric) + ' (' + scaleUnit(s.metric) + ')', lx + 16, ly);
+    });
   }
 
   if (document.readyState === 'loading') {
