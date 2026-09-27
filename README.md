@@ -15,11 +15,24 @@ Die vollständige Dokumentation liegt im **[Projekt-Wiki](https://github.com/jun
 - **[CHANGELOG.md](./CHANGELOG.md)** — Versionshistorie.
 - **[LICENSE.md](./LICENSE.md)** — Lizenz (CC BY-NC-SA 4.0) und medizinischer Haftungsausschluss.
 
-## Roadmap (geplant, noch nicht umgesetzt)
+## 🚧 Roadmap / Geplante Funktionen
 
 - Eigenständiger HTML-Export (eine portierbare Datei, nicht nur PDF).
 - Frei wählbarer Zeitraum (Von/Bis) zusätzlich zu den Presets.
 - Speichern der Konfiguration (localStorage).
+
+### Idee: PWA (optional)
+
+**Idee:** Das Tool zusätzlich als PWA (`manifest.json` + `sw.js`) auszuliefern, damit es installierbar und offline-fähig wird — bewusst als optionale Erweiterung, nicht als Standard.
+
+**Warum optional?**
+- Am PC/Laptop bringt „installierbar" wenig; die Seite läuft auch im Browser.
+- Auf iOS/iPadOS haben installierte PWAs einen getrennten `localStorage` — das kann die automatische Datenübernahme aus dem Tracker aushebeln.
+- Offline betrifft nur die App-Shell, nicht die (ohnehin lokalen) Daten.
+
+**Offene Punkte:**
+- PNG-Icons (192/512) wären zu erzeugen.
+- Ob der Zusatzaufwand (Cache-/Update-Flow) den Nutzen rechtfertigt.
 
 ## Technische Basis
 
