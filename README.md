@@ -17,10 +17,10 @@ Die vollständige Dokumentation liegt im **[Projekt-Wiki](https://github.com/jun
 
 ## Roadmap (geplant, noch nicht umgesetzt)
 
-- Konfigurierbare Berichts-Abschnitte (Kennzahlen, Verlauf, Vergleich, Heatmap, Symptombereiche, PEM-Episoden, Notizen).
-- Überlagerungs-Diagramm (mehrere Messwerte in einem Diagramm, Hybrid-Skala).
-- Kopfdaten (Patient:in, Arzt, Zeitraum, Freitext).
-- PDF-Ausgabe über den Browser-Druck.
+- Eigenständiger HTML-Export (eine portierbare Datei, nicht nur PDF).
+- Individuelle Zusammenstellung der Vergleichs-Diagramme (eigene Metrik-Auswahl pro Diagramm).
+- Frei wählbarer Zeitraum (Von/Bis) zusätzlich zu den Presets.
+- Speichern der Konfiguration (localStorage).
 
 ## Technische Basis
 
