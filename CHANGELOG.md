@@ -5,6 +5,12 @@ Die Version wird in `<meta name="app-version">` in `index.html` gepflegt und fol
 
 Nur Änderungen, die die App selbst betreffen (Funktionen, UI, Verhalten), werden aufgeführt. Änderungen an Dokumentation, Lizenz oder anderen Nicht-App-Dateien gehören nicht hierher. Versionen ohne App-Änderungen werden übersprungen.
 
+## v1.1.1 – 2026-09-26
+
+### Geändert
+
+- **Automatische Datenübernahme:** Beim Öffnen werden vorhandene Tracker-Daten aus demselben Browser automatisch geladen (statt sie erst über „Tracker" laden zu müssen).
+
 ## v1.1.0 – 2026-09-26
 
 ### Neu

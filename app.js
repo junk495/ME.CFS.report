@@ -405,7 +405,7 @@
   }
 
   // Lädt die Daten direkt aus dem localStorage des ME/CFS-Symptom-Trackers.
-  function loadFromTracker() {
+  function loadFromTracker(silent) {
     var prefix = 'mecfs_tagescheck_';
     var list = [];
     try {
@@ -423,7 +423,7 @@
       // localStorage nicht verfügbar
     }
     if (!list.length) {
-      alert('Keine Tracker-Daten in diesem Browser gefunden. Nutze „CSV/JSON" zum Import.');
+      if (!silent) alert('Keine Tracker-Daten in diesem Browser gefunden. Nutze „CSV/JSON" zum Import.');
       return;
     }
     loadRecords(list);
@@ -575,10 +575,15 @@
     document.getElementById('demo-button').addEventListener('click', function () {
       loadRecords(buildDemo());
     });
-    document.getElementById('tracker-button').addEventListener('click', loadFromTracker);
+    document.getElementById('tracker-button').addEventListener('click', function () {
+      loadFromTracker();
+    });
     document.getElementById('btn-print').addEventListener('click', function () {
       window.print();
     });
+
+    // Vorhandene Tracker-Daten beim Öffnen automatisch laden (gleicher Browser)
+    loadFromTracker(true);
 
     renderDiagramConfig();
 
