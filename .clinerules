@@ -1,0 +1,89 @@
+# Projektkontext
+Das Projekt ist eine eigenständige, rein statische Web-Anwendung ("ME.CFS.report") zur interaktiven Auswertung der vom ME/CFS-Symptom-Tracker exportierten Daten (CSV oder JSON) und zum Erstellen eines konfigurierbaren Arztberichts (PDF).
+Primäres Ziel: Am PC/Laptop/Tablet einen individuell zusammenstellbaren, druckbaren Bericht erzeugen — insbesondere mit der Möglichkeit, mehrere Messwerte in einem Diagramm zu überlagern.
+Hosting-Umgebung: GitHub Pages (rein statisch, HTTPS). Der Daten-Import erfolgt ausschließlich lokal im Browser; es gibt kein Backend und bewusst keine PWA (kein `manifest.json`/`sw.js`).
+
+# Technologie-Stack
+- Struktur & Design: HTML5, CSS3 (keine Build-Tools wie Webpack/Vite).
+- Logik: Modernes Vanilla JavaScript (ES6+), kein Framework, keine jQuery.
+- Diagramme: eigene Zeichnungen mit nativem Canvas (keine externe Chart-Bibliothek).
+- Daten: Import von CSV (Semikolon-getrennt, UTF-8) oder JSON per Datei-Auswahl; Verarbeitung ausschließlich im Browser.
+- Ausgabe: PDF über `window.print()` + `@media print` (keine PDF-Bibliothek, kein HTML-Download).
+- Kein Node.js/PHP/Python-Code, keine Datenübertragung an übergeordnete Instanzen.
+
+# Strikte Regeln für die Code-Generierung (KI-Direktiven)
+
+1. ABSOLUTE DATENLOKALITÄT:
+   - Importdateien (CSV/JSON) werden ausschließlich lokal im Browser gelesen und verarbeitet.
+   - Schreibe NIEMALS Code, der Nutzerdaten an einen externen Server, eine API oder eine Cloud-Datenbank sendet.
+
+2. KEIN BACKEND / KEINE FRAMEWORKS / KEINE EXTERNEN BIBLIOTHEKEN:
+   - Das Projekt ist 100 % statisch.
+   - Keine Frontend-Frameworks (React, Vue, Angular), kein jQuery. Nur Vanilla JS.
+   - Keine CSS-Frameworks (Tailwind/Bootstrap), kein CDN. Nur reines CSS in einer separaten `style.css`.
+   - Keine externe Chart-Bibliothek: Diagramme mit nativem Canvas selbst zeichnen.
+   - Keine PDF-Bibliothek: PDF-Ausgabe ausschließlich über den Browser-Druck.
+
+3. DESKTOP-/TABLET-LAYOUT (kein Mobile-First):
+   - Designe für PC/Laptop/Tablet (breites Layout: Kopfleiste + linke Konfigurations-Sidebar + rechte Live-Vorschau), nicht für das Smartphone-Hochformat.
+   - Verhindere dennoch unnötiges horizontales Scrollen; die Vorschau darf intern scrollen.
+   - Bedienelemente (Buttons/Checkboxen) sollten groß genug sein (mind. 44x44 px), da das Tool auch am Tablet per Touch bedient wird.
+   - Reizarmes Dark-Design für die Oberfläche, hohe Kontraste, keine Animationen. Der Bericht selbst (Vorschau & Druck) ist hell (weiß, dunkle Schrift) für eine saubere PDF.
+
+4. SINGLE PAGE APPLICATION (SPA) STRUKTUR:
+   - Die gesamte App besteht aus einer `index.html`.
+   - Die Seite ist fest in drei Bereiche gegliedert: Kopfleiste (Import/Aktionen), linke Konfigurations-Sidebar, rechte Vorschau. Alle Änderungen an der Konfiguration aktualisieren die Vorschau unmittelbar (kein Routing).
+
+5. DATENVERARBEITUNG & AUSWERTUNG:
+   - Leere CSV-Felder werden als `null` interpretiert (niemals als `0` oder `""`).
+   - Skalen-Richtung beachten: Alle Skalen 0–4 (Symptome, Belastung, Pacing, Arbeitsfähigkeit, Teilhabe) = höher ist schlechter; nur Zustand (0–10) und Bell (0–100) = höher ist besser.
+   - Dezimalkomma (`7,5`) korrekt nach `7.5` parsen.
+   - Überlagerungs-Diagramm (Multi-Series): gleiche Skala → gemeinsame y-Achse mit Rohwerten; gemischte Skalen → jede Metrik auf 0–100 % ihres Skalenbereichs normalisieren (die Legende zeigt die Original-Skala je Metrik).
+   - Der Crash-Risiko-Score ist regelbasiert, transparent und nachvollziehbar und wird mit einem deutlichen medizinischen Haftungsausschluss versehen (kein Diagnose-/Medizinprodukt).
+
+6. DATENMODELL-KOMPATIBILITÄT (ME/CFS-Symptom-Tracker + ME.CFS.graph):
+   - Die Feld-Keys und CSV-Header (`FIELD_DEFS` in `app.js`) bilden den Daten-Vertrag mit dem Tracker (`EXPORT_COLUMNS`) und der Graph-App (`FIELD_DEFS`).
+   - Feld-Keys, CSV-Header und Skalen-Richtungen dürfen NUR geändert werden, wenn Tracker und Graph (gleicher Stand) im selben Schritt mit angepasst werden — sonst fehlen Werte.
+   - Bei jeder Änderung am Datenmodell MÜSSEN die gemeinsame `Datenmodell`-Seite im Wiki und die Feld-Definitionen aller drei Apps (Tracker `EXPORT_COLUMNS` + Graph `FIELD_DEFS` + Report `FIELD_DEFS`) gemeinsam aktualisiert werden.
+
+# Versionierung (Semantic Versioning)
+
+- Die Versionsnummer wird an **zwei** Stellen geführt und MUSS immer übereinstimmen (keine PWA, daher kein `sw.js`):
+  1. `<meta name="app-version" content="vX.Y.Z">` in `index.html` (Anzeige in der App).
+  2. Oberster Eintrag in `CHANGELOG.md`.
+- Schema: `MAJOR.MINOR.PATCH` (z. B. `v0.1.0`).
+  - `MAJOR` (x.0.0): grundlegende Neuausrichtung oder inkompatible Änderung.
+  - `MINOR` (0.x.0): neue Funktion (abwärtskompatibel).
+  - `PATCH` (0.0.x): reine Fehlerkorrekturen und kleinere Verbesserungen ohne neue Funktion.
+- Bei **jedem** Release werden `index.html` (`meta name="app-version"`) und `CHANGELOG.md` **gemeinsam im selben Schritt** aktualisiert. Sie dürfen nie auseinanderlaufen.
+- Ein Changelog-Eintrag dokumentiert ausschließlich die Änderungen **an der App**. Änderungen an Dokumentation oder Lizenz erhalten keinen eigenen Versions-Eintrag.
+
+# Dokumentation
+
+Die Dokumentation ist auf zwei Orte verteilt und muss inhaltlich stets zusammenpassen: Ein Teil liegt im **Haupt-Repository**, der andere im **GitHub-Wiki** (https://github.com/junk495/ME.CFS/wiki). Bei Code-Änderungen MÜSSEN die betroffenen Dokumente an ihrem jeweiligen Ort im selben Schritt mitgepflegt werden.
+
+## Haupt-Repository (`ME.CFS.report`)
+
+- `README.md` — Kurzüberblick & Einstieg: Live-App-Link, Kurzvorstellung, Verweis aufs Wiki, Roadmap/geplante (noch nicht implementierte) Funktionen. NICHT hinein: ausführliche Bedienung, Feld-Details, medizinische Grundlagen, Beschreibung bereits implementierter Funktionen (→ Wiki).
+- `CHANGELOG.md` — Versionshistorie (je Version die Änderungen **an der App**). NICHT hinein: aktuelle Feature-Beschreibung (→ Wiki), Bedienung (→ Wiki), Änderungen an Dokumentation/Lizenz.
+- `LICENSE.md` — Lizenz (CC BY-NC-SA 4.0) + medizinischer Haftungsausschluss.
+
+## GitHub-Wiki (Projekt-Wiki für Tracker + Graph + Report)
+
+- `Home.md` — Einstiegsseite des Wikis (alle Apps).
+- `Datenmodell.md` — Gemeinsame technische Referenz: Feld-Referenz, Skalen-Richtungen, Import-/Export, Risiko-Score.
+- `Erlaeuterungen.md` — Gemeinsame fachliche Grundlagen: ME/CFS, PEM, Skalen, Risiko-Regelwerk, Quellen.
+- `Bedienungsanleitung-Report.md`, `FAQ-Report.md`, `Dev-Guide-Report.md` — Report-spezifische Seiten.
+- Das Wiki dokumentiert ausschließlich **bereits implementierte** Funktionen/Verhalten. Geplante (noch nicht umgesetzte) Funktionen stehen in der Roadmap der jeweiligen `README.md` (Repo).
+
+## Pflege-Regeln (KI-Direktiven)
+
+- Repo-Dokumente und Wiki-Seiten sind verbindliche Projektdokumentation und müssen inhaltlich zusammenpassen. Bei Code-Änderungen MÜSSEN die betroffenen Dokumente im selben Schritt aktualisiert werden.
+- Konkrete Zuordnung:
+  - Geändertes Import-Format / geänderte Berechnung / geändertes Risiko-Regelwerk → `Datenmodell.md` (Wiki) (+ ggf. `Erlaeuterungen.md` im Wiki).
+  - Neue Funktion / geändertes UI / neuer Berichts-Abschnitt → `Bedienungsanleitung-Report.md` (Wiki) (+ ggf. `Home.md`, `FAQ-Report.md` im Wiki).
+  - Neue Version (`meta name="app-version"` erhöhen) → `CHANGELOG.md` (Repo).
+  - Änderung an Lizenz/Rechtlichem → `LICENSE.md` (Repo).
+- Keine Duplikate: Jeder Inhalt gehört in genau EIN Dokument. Wird derselbe Inhalt mehrfach benötigt, wird verlinkt statt kopiert.
+- Repo-Dokumente und Wiki-Seiten müssen fachlich korrekt und mit dem Code konsistent sein — veraltete Aussagen sind sofort zu korrigieren.
+

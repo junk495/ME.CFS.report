@@ -1,0 +1,79 @@
+# ==========================================
+# 1. IHRE SPEZIFISCHEN EINSTELLUNGEN
+# ==========================================
+# Ignoriere den kompletten appinfo-Ordner und alle darin enthaltenen Dateien
+appinfo/
+
+# Ignoriere alle CSV- und Excel-Dateien im gesamten Projekt
+*.csv
+*.xlsx
+
+# ==========================================
+# 2. WEB-FRAMEWORKS & ABHÄNGIGKEITEN (Node.js / JS)
+# ==========================================
+# Ignoriert heruntergeladene Bibliotheken und Build-Ordner (z.B. React, Vue, Next.js)
+node_modules/
+/dist
+/build
+/.next/
+/out
+
+# ==========================================
+# 3. RECHNER/DATEN-AUSWERTUNG (Python)
+# ==========================================
+# Falls Sie Python für Datenanalysen oder Graphik-Generierung nutzen
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.pytest_cache/
+
+# ==========================================
+# 4. SICHERHEIT & GEHEIMNISSE (API-Schlüssel, Datenbanken)
+# ==========================================
+# Verhindert, dass Passwörter oder API-Keys auf GitHub/GitLab landen
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# ==========================================
+# 5. LOGS & TEMPORÄRE DATEIEN
+# ==========================================
+# Verhindert das Tracken von Systemprotokollen und Absturzberichten
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# ==========================================
+# 6. BETRIEBSSYSTEM-DATEIEN (Müll-Dateien)
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# ==========================================
+# 7. CODE-EDITOREN & IDES
+# ==========================================
+# Visual Studio Code & JetBrains Einstellungen
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

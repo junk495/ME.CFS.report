@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#16181d">
+  <meta name="app-version" content="v0.1.0">
+  <meta name="description" content="ME.CFS.report — lokale, interaktive Auswertung und konfigurierbarer Arztbericht (PDF) aus den ME/CFS-Tracker-Daten.">
+  <title>ME.CFS.report</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <h1>ME.CFS.report</h1>
+      <p class="subtitle">Auswertung &amp; konfigurierbarer Arztbericht (PDF)</p>
+    </div>
+    <div class="import-area">
+      <button class="button" id="tracker-button" type="button" title="Daten aus dem Tracker laden (gleicher Browser)">Tracker</button>
+      <label class="button" for="file-input" title="CSV- oder JSON-Datei laden">CSV/JSON</label>
+      <input type="file" id="file-input" accept=".csv,.json,text/csv,application/json" hidden>
+      <button class="button" id="demo-button" type="button" title="Beispieldaten anzeigen">Beispiel</button>
+      <button class="button button-primary" id="btn-print" type="button" title="Bericht als PDF speichern" disabled>Drucken / PDF</button>
+    </div>
+    <div class="import-status" id="import-status" role="status" aria-live="polite">Noch keine Daten geladen.</div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Konfiguration</h2>
+      <p class="hint">Die Konfiguration (Kopfdaten, Zeitraum, Abschnitte, Diagramme) folgt in den nächsten Schritten.</p>
+    </aside>
+
+    <main class="preview">
+      <div class="report-paper">
+        <div class="empty-state" id="preview-empty">
+          Bitte zuerst Daten laden („Tracker“, „CSV/JSON“ oder „Beispiel“).
+        </div>
+        <div id="preview-content" hidden></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
